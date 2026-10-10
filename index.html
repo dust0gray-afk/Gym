@@ -55,6 +55,11 @@ li:first-child{border-top:0}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .sm{flex:1;min-width:110px;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px;cursor:pointer}
 #hist li{justify-content:space-between}
+.sv{width:100%;margin-top:8px;font:inherit;font-weight:600;color:var(--on);background:var(--accent);border:0;border-radius:10px;padding:10px;cursor:pointer}
+.sv:disabled{opacity:.45;cursor:default}
+.sv.ok{background:none;color:var(--ink);border:1px solid var(--accent)}
+#sess li{justify-content:space-between}
+#sess .t{flex:1}
 </style>
 </head>
 <body>
@@ -63,6 +68,7 @@ li:first-child{border-top:0}
 <section class="card"><div class="wk" id="wk"></div></section>
 <div class="bar"><button class="rst" id="ed" type="button">ویرایش برنامه (ست، تکرار و نوع ست)</button></div>
 <div id="days"></div>
+<section class="card" id="sess" hidden></section>
 <button class="rst" id="fin" type="button">پایان هفته: گزارش برای ارسال</button>
 <section class="card" id="rep" hidden>
 <h2>گزارش هفته</h2>
@@ -117,13 +123,15 @@ function render(){
         b+='<button type="button" class="b" data-k="'+k+'" aria-pressed="'+(D[k]?'true':'false')+'" aria-label="ست '+fa(s+1)+'">'+(D[k]?'✓':'')+'</button>'}
       li+='<li><span class="n">'+fa(j+1)+'</span><span class="t">'+esc(e.n)+'<small>'+fa(e.s)+'×'+esc(fa(e.r))+(e.t&&e.t!='عادی'?' · '+e.t:'')+'</small></span><span class="s">'+b+'</span></li>';
     });
-    h+='<section class="card'+(w.day==T?' today':'')+'"><h2>'+esc(w.name)+' — '+esc(w.tag)+'<span>'+fa(done)+' از '+fa(total)+' ست</span></h2><ul>'+li+'</ul>'+(EDIT?'<button type="button" class="add" data-add="'+di+'">+ افزودن حرکت</button>':'')+'</section>';
+    h+='<section class="card'+(w.day==T?' today':'')+'"><h2>'+esc(w.name)+' — '+esc(w.tag)+'<span>'+fa(done)+' از '+fa(total)+' ست</span></h2><ul>'+li+'</ul>'+(EDIT?'<button type="button" class="add" data-add="'+di+'">+ افزودن حرکت</button>':svBtn(di,done))+'</section>';
   });
   $('days').innerHTML=h;
 }
 $('days').addEventListener('click',function(ev){
   var t=ev.target,b=t.closest('.b');
   if(b){var k=b.dataset.k;if(D[k])delete D[k];else D[k]=1;save();render();return}
+  var sv=t.closest('[data-save]');
+  if(sv){saveSession(+sv.dataset.save);return}
   var d=t.closest('[data-del]');
   if(d){var p=d.dataset.del.split('-');P[+p[0]].ex.splice(+p[1],1);savePlan();render();return}
   var a=t.closest('[data-add]');
@@ -148,6 +156,37 @@ $('rp').addEventListener('click',function(){
   ARM=false;P=mk();savePlan();this.textContent='برگرداندن برنامه اصلی';render();
 });
 $('rst').addEventListener('click',function(){D={};save();render()});
+var SK='gym007v2sess',S=[];
+try{S=JSON.parse(localStorage.getItem(SK)||'[]')||[]}catch(e){S=[]}
+function saveSess(){try{localStorage.setItem(SK,JSON.stringify(S))}catch(e){}}
+function p2(n){return (n<10?'0':'')+n}
+function todayISO(){var t=new Date();return t.getFullYear()+'-'+p2(t.getMonth()+1)+'-'+p2(t.getDate())}
+function dateStr(){try{return new Intl.DateTimeFormat('fa-IR-u-ca-persian',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date())}catch(e){return todayISO()}}
+function svBtn(di,done){
+  var ok=S.some(function(x){return x.id==todayISO()+'|'+di});
+  return '<button type="button" class="sv'+(ok?' ok':'')+'" data-save="'+di+'"'+(done?'':' disabled')+'>'+(ok?'جلسه امروز ذخیره شد ✓ — ذخیره دوباره':'پایان تمرین: ذخیره جلسه')+'</button>';
+}
+function dayText(di){
+  var w=P[di],tot=0,dn=0,lines=[];
+  w.ex.forEach(function(e){
+    var d=0,s;for(s=0;s<e.s;s++)if(D[e.id+'-'+s])d++;
+    tot+=e.s;dn+=d;
+    lines.push((d==e.s?'✓':d?'~':'✗')+' '+e.n+' '+fa(e.s)+'×'+fa(e.r)+(e.t&&e.t!='عادی'?' ('+e.t+')':'')+': '+fa(d)+'/'+fa(e.s));
+  });
+  return {done:dn,total:tot,text:'جلسه تمرین 007 V2 — '+dateStr()+'\n'+w.name+' — '+w.tag+': '+fa(dn)+' از '+fa(tot)+' ست\n(✓ کامل، ~ ناقص، ✗ انجام نشده)\n\n'+lines.join('\n')};
+}
+function saveSession(di){
+  var w=P[di],o=dayText(di),id=todayISO()+'|'+di;
+  if(!o.done)return;
+  S=S.filter(function(x){return x.id!=id});
+  S.unshift({id:id,r:dateStr(),name:w.name,tag:w.tag,done:o.done,total:o.total,t:o.text});
+  S=S.slice(0,60);saveSess();renderSess();render();
+}
+function renderSess(){
+  $('sess').hidden=!S.length;
+  $('sess').innerHTML=S.length?'<h2>جلسه‌های ذخیره‌شده</h2><ul>'+S.map(function(x,i){
+    return '<li><span class="t">'+esc(x.r)+'<small>'+esc(x.name)+' — '+esc(x.tag)+' · '+fa(x.done)+' از '+fa(x.total)+' ست</small></span><button type="button" class="sm" data-v="'+i+'" style="flex:none;min-width:64px">نمایش</button><button type="button" class="sm" data-x="'+i+'" style="flex:none;min-width:64px">حذف</button></li>'}).join('')+'</ul>':'';
+}
 var HK='gym007v2hist',H=[];
 try{H=JSON.parse(localStorage.getItem(HK)||'[]')||[]}catch(e){H=[]}
 function saveHist(){try{localStorage.setItem(HK,JSON.stringify(H))}catch(e){}}
@@ -194,7 +233,12 @@ $('hist').addEventListener('click',function(ev){
   var b=ev.target.closest('button');if(!b)return;
   var x=H[+b.dataset.i];if(x)showRep(x.t);
 });
-renderHist();
+$('sess').addEventListener('click',function(ev){
+  var b=ev.target.closest('button');if(!b)return;
+  if(b.dataset.v!=null){var x=S[+b.dataset.v];if(x)showRep(x.t)}
+  else if(b.dataset.x!=null){S.splice(+b.dataset.x,1);saveSess();renderSess();render()}
+});
+renderHist();renderSess();
 render();
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
 </script>
