@@ -60,6 +60,19 @@ li:first-child{border-top:0}
 .sv.ok{background:none;color:var(--ink);border:1px solid var(--accent)}
 #sess li{justify-content:space-between}
 #sess .t{flex:1}
+main{padding-bottom:90px}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.ov[hidden],#rest[hidden]{display:none}
+.mb{background:var(--card);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:92%;overflow:auto}
+.mb h2{margin-bottom:12px}
+.mb label{display:flex;flex-direction:column;font-size:.8rem;color:var(--mute);margin-bottom:10px;gap:2px}
+.mb input,.mb textarea{font:inherit;font-size:1rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;width:100%}
+.mb .sm.pri{background:var(--accent);color:var(--on);border-color:var(--accent);font-weight:600}
+.mb .sm.chip2{flex:none;min-width:58px;padding:6px 8px}
+#rest{position:fixed;inset-inline:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));background:var(--accent);color:var(--on);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px;z-index:9;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+#rest span{flex:1}
+#rt{font-size:1.4rem;font-weight:800;font-variant-numeric:tabular-nums;flex:none!important}
+#rest button{font:inherit;color:var(--on);background:transparent;border:1px solid var(--on);border-radius:8px;padding:4px 10px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -79,6 +92,15 @@ li:first-child{border-top:0}
 <button class="rst" id="rp" type="button" hidden>برگرداندن برنامه اصلی</button>
 <button class="rst" id="rst" type="button">شروع هفته جدید (پاک کردن تیک‌ها)</button>
 </main>
+<div class="ov" id="md" hidden><div class="mb" role="dialog" aria-modal="true" aria-labelledby="mt">
+<h2 id="mt"></h2>
+<label>وزنه (کیلوگرم)<input id="mw" type="number" inputmode="decimal" step="0.5" min="0" placeholder="مثلاً ۶۰"></label>
+<label>شرح<textarea id="mn" rows="2" placeholder="مثلاً هر طرف ۱۵"></textarea></label>
+<label>استراحت بعد از این ست (ثانیه)<input id="mr" type="number" inputmode="numeric" min="0" step="5" placeholder="مثلاً ۹۰"></label>
+<div class="row" style="margin:0 0 12px"><button type="button" class="sm chip2" data-s="60">۶۰</button><button type="button" class="sm chip2" data-s="90">۹۰</button><button type="button" class="sm chip2" data-s="120">۱۲۰</button><button type="button" class="sm chip2" data-s="180">۱۸۰</button></div>
+<div class="row"><button type="button" class="sm pri" id="mok">ثبت ست ✓</button><button type="button" class="sm" id="mx">لغو</button><button type="button" class="sm" id="mdel" hidden>حذف تیک</button></div>
+</div></div>
+<div id="rest" hidden><div id="rt">۰۰:۰۰</div><span id="rl">استراحت</span><button type="button" id="rp30">+۳۰ ثانیه</button><button type="button" id="rs">رد کردن</button></div>
 <script>
 var SH=['ش','ی','د','س','چ','پ','ج'];
 var TYPES=['عادی','دراپ‌ست','سوپرست','گرم‌کردن','تا ناتوانی'];
@@ -121,7 +143,7 @@ function render(){
       }
       for(s=0;s<e.s;s++){k=e.id+'-'+s;
         b+='<button type="button" class="b" data-k="'+k+'" aria-pressed="'+(D[k]?'true':'false')+'" aria-label="ست '+fa(s+1)+'">'+(D[k]?'✓':'')+'</button>'}
-      li+='<li><span class="n">'+fa(j+1)+'</span><span class="t">'+esc(e.n)+'<small>'+fa(e.s)+'×'+esc(fa(e.r))+(e.t&&e.t!='عادی'?' · '+e.t:'')+'</small></span><span class="s">'+b+'</span></li>';
+      li+='<li><span class="n">'+fa(j+1)+'</span><span class="t">'+esc(e.n)+'<small>'+fa(e.s)+'×'+esc(fa(e.r))+(e.t&&e.t!='عادی'?' · '+e.t:'')+'</small>'+wLine(e)+'</span><span class="s">'+b+'</span></li>';
     });
     h+='<section class="card'+(w.day==T?' today':'')+'"><h2>'+esc(w.name)+' — '+esc(w.tag)+'<span>'+fa(done)+' از '+fa(total)+' ست</span></h2><ul>'+li+'</ul>'+(EDIT?'<button type="button" class="add" data-add="'+di+'">+ افزودن حرکت</button>':svBtn(di,done))+'</section>';
   });
@@ -129,7 +151,7 @@ function render(){
 }
 $('days').addEventListener('click',function(ev){
   var t=ev.target,b=t.closest('.b');
-  if(b){var k=b.dataset.k;if(D[k])delete D[k];else D[k]=1;save();render();return}
+  if(b){openSet(b.dataset.k);return}
   var sv=t.closest('[data-save]');
   if(sv){saveSession(+sv.dataset.save);return}
   var d=t.closest('[data-del]');
@@ -171,7 +193,7 @@ function dayText(di){
   w.ex.forEach(function(e){
     var d=0,s;for(s=0;s<e.s;s++)if(D[e.id+'-'+s])d++;
     tot+=e.s;dn+=d;
-    lines.push((d==e.s?'✓':d?'~':'✗')+' '+e.n+' '+fa(e.s)+'×'+fa(e.r)+(e.t&&e.t!='عادی'?' ('+e.t+')':'')+': '+fa(d)+'/'+fa(e.s));
+    lines.push((d==e.s?'✓':d?'~':'✗')+' '+e.n+' '+fa(e.s)+'×'+fa(e.r)+(e.t&&e.t!='عادی'?' ('+e.t+')':'')+': '+fa(d)+'/'+fa(e.s)+detTxt(e));
   });
   return {done:dn,total:tot,text:'جلسه تمرین 007 V2 — '+dateStr()+'\n'+w.name+' — '+w.tag+': '+fa(dn)+' از '+fa(tot)+' ست\n(✓ کامل، ~ ناقص، ✗ انجام نشده)\n\n'+lines.join('\n')};
 }
@@ -187,6 +209,62 @@ function renderSess(){
   $('sess').innerHTML=S.length?'<h2>جلسه‌های ذخیره‌شده</h2><ul>'+S.map(function(x,i){
     return '<li><span class="t">'+esc(x.r)+'<small>'+esc(x.name)+' — '+esc(x.tag)+' · '+fa(x.done)+' از '+fa(x.total)+' ست</small></span><button type="button" class="sm" data-v="'+i+'" style="flex:none;min-width:64px">نمایش</button><button type="button" class="sm" data-x="'+i+'" style="flex:none;min-width:64px">حذف</button></li>'}).join('')+'</ul>':'';
 }
+var LR=0,RT=null,RE=0,AC=null,CUR=null;
+try{LR=parseInt(localStorage.getItem('gym007v2rest'),10)||0}catch(e){LR=0}
+function findEx(id){var r=null;P.forEach(function(w){w.ex.forEach(function(e){if(e.id==id)r=e})});return r}
+function obj(k){var x=D[k];return (x&&typeof x=='object')?x:{}}
+function wLine(e){
+  var ws=[],any=false,s,k;
+  for(s=0;s<e.s;s++){k=e.id+'-'+s;var x=obj(k);if(x.w){ws.push(fa(x.w));any=true}else ws.push(D[k]?'✓':'–')}
+  return any?'<small>وزنه: '+ws.join(' · ')+' کیلو</small>':'';
+}
+function detTxt(e){
+  var a=[],s,x;
+  for(s=0;s<e.s;s++){x=obj(e.id+'-'+s);
+    if(x.w||x.n||x.r)a.push('\n     ست '+fa(s+1)+': '+(x.w?fa(x.w)+' کیلو':'وزنه ثبت نشده')+(x.n?' — '+x.n:'')+(x.r?' — استراحت '+fa(x.r)+' ثانیه':''))}
+  return a.join('');
+}
+function openSet(k){
+  var m=k.match(/^(.*)-(\d+)$/),e=findEx(m[1]),s=+m[2];if(!e)return;
+  CUR=k;var x=obj(k);
+  $('mt').textContent='ست '+fa(s+1)+' — '+e.n;
+  $('mw').value=x.w||'';$('mn').value=x.n||'';$('mr').value=x.r||LR||'';
+  if(!x.w&&s>0){var pv=obj(e.id+'-'+(s-1));if(pv.w)$('mw').value=pv.w}
+  $('mdel').hidden=!D[k];
+  $('md').hidden=false;
+  setTimeout(function(){$('mw').focus()},60);
+}
+function closeSet(){$('md').hidden=true;CUR=null}
+function beep(){
+  try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}
+  try{var c=AC,o=c.createOscillator(),g=c.createGain();o.frequency.value=880;g.gain.value=.15;o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+.35)}catch(e){}
+}
+function tick(){
+  var l=Math.ceil((RE-Date.now())/1000);
+  if(l<=0){clearInterval(RT);RT=null;$('rt').textContent='۰۰:۰۰';$('rl').textContent='استراحت تموم شد';beep();setTimeout(function(){if(!RT)$('rest').hidden=true},3000);return}
+  $('rt').textContent=fa(p2(Math.floor(l/60))+':'+p2(l%60));$('rl').textContent='استراحت';
+}
+function startRest(sec){
+  RE=Date.now()+sec*1000;$('rest').hidden=false;
+  clearInterval(RT);tick();RT=setInterval(tick,250);
+}
+$('mok').addEventListener('click',function(){
+  var was=!!D[CUR],r=parseInt($('mr').value,10)||0;
+  try{AC=AC||new (window.AudioContext||window.webkitAudioContext)()}catch(e){}
+  D[CUR]={w:$('mw').value.trim(),n:$('mn').value.trim(),r:r};
+  if(r){LR=r;try{localStorage.setItem('gym007v2rest',r)}catch(e){}}
+  save();closeSet();render();
+  if(r&&!was)startRest(r);
+});
+$('mdel').addEventListener('click',function(){delete D[CUR];save();closeSet();render()});
+$('mx').addEventListener('click',closeSet);
+$('md').addEventListener('click',function(ev){if(ev.target===this)closeSet()});
+document.addEventListener('keydown',function(ev){if(ev.key=='Escape'&&!$('md').hidden)closeSet()});
+$('md').querySelectorAll('.chip2').forEach(function(b){b.addEventListener('click',function(){$('mr').value=b.dataset.s})});
+$('rs').addEventListener('click',function(){clearInterval(RT);RT=null;$('rest').hidden=true});
+$('rp30').addEventListener('click',function(){
+  if(RT){RE+=30000;tick()}else startRest(30);
+});
 var HK='gym007v2hist',H=[];
 try{H=JSON.parse(localStorage.getItem(HK)||'[]')||[]}catch(e){H=[]}
 function saveHist(){try{localStorage.setItem(HK,JSON.stringify(H))}catch(e){}}
@@ -202,7 +280,7 @@ function report(){
     w.ex.forEach(function(e){
       var d=0,s;for(s=0;s<e.s;s++)if(D[e.id+'-'+s])d++;
       wt+=e.s;wd+=d;
-      lines.push('  '+(d==e.s?'✓':d?'~':'✗')+' '+e.n+' '+fa(e.s)+'×'+fa(e.r)+(e.t&&e.t!='عادی'?' ('+e.t+')':'')+': '+fa(d)+'/'+fa(e.s));
+      lines.push('  '+(d==e.s?'✓':d?'~':'✗')+' '+e.n+' '+fa(e.s)+'×'+fa(e.r)+(e.t&&e.t!='عادی'?' ('+e.t+')':'')+': '+fa(d)+'/'+fa(e.s)+detTxt(e));
     });
     tot+=wt;dn+=wd;
     L.push(w.name+' — '+w.tag+': '+fa(wd)+' از '+fa(wt)+' ست');
